@@ -16,12 +16,6 @@ function cleanPal(raw) {
   if (!isPhoto(raw.photo)) return null;
   const name = raw.name.replace(/\s+/g, " ").trim().slice(0, 18);
   if (!name) return null;
-  const chat = Array.isArray(raw.chat)
-    ? raw.chat
-        .filter((line) => line && (line.role === "you" || line.role === "pal") && typeof line.text === "string")
-        .slice(-12)
-        .map((line) => ({ role: line.role, text: line.text.slice(0, 200) }))
-    : [];
   return {
     id: raw.id,
     name,
@@ -29,8 +23,44 @@ function cleanPal(raw) {
     outfit: OUTFITS.has(raw.outfit) ? raw.outfit : "none",
     makeup: MAKEUP.has(raw.makeup) ? raw.makeup : "none",
     snacks: Number.isFinite(raw.snacks) ? Math.max(0, Math.min(5, raw.snacks)) : 0,
-    moodLine: typeof raw.moodLine === "string" ? raw.moodLine.slice(0, 200) : "",
-    chat,
+    landmarks: cleanLandmarks(raw.landmarks),
+  };
+}
+
+function cleanPoint(point) {
+  if (!point || !Number.isFinite(point.x) || !Number.isFinite(point.y)) return null;
+  return {
+    x: Math.min(1, Math.max(0, point.x)),
+    y: Math.min(1, Math.max(0, point.y)),
+  };
+}
+
+function cleanLandmarks(raw) {
+  const leftEye = cleanPoint(raw?.leftEye);
+  const rightEye = cleanPoint(raw?.rightEye);
+  const mouth = cleanPoint(raw?.mouth);
+  const headTop = cleanPoint(raw?.headTop);
+  const forehead = cleanPoint(raw?.forehead);
+  const hatBrim = cleanPoint(raw?.hatBrim);
+  const leftCheek = cleanPoint(raw?.leftCheek);
+  const rightCheek = cleanPoint(raw?.rightCheek);
+  const neck = cleanPoint(raw?.neck);
+  if (!leftEye || !rightEye || !mouth || !forehead || !hatBrim || !leftCheek || !rightCheek || !neck) {
+    return null;
+  }
+  const eyeSpan = Number(raw.eyeSpan);
+  return {
+    leftEye,
+    rightEye,
+    mouth,
+    headTop: headTop || { x: (leftEye.x + rightEye.x) / 2, y: Math.max(0, leftEye.y - 0.2) },
+    forehead,
+    hatBrim,
+    leftCheek,
+    rightCheek,
+    neck,
+    eyeSpan: Number.isFinite(eyeSpan) ? eyeSpan : Math.abs(rightEye.x - leftEye.x),
+    confident: Boolean(raw.confident),
   };
 }
 

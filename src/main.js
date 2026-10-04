@@ -1,9 +1,11 @@
 import { cameraMessage, drawPhoto, fileToPhoto, openCamera, stopStream, waitForFrame } from "./camera.js";
 import { el } from "./dom.js";
+import { detectFaceFromUrl } from "./face.js";
 import { MAKEUP, NAME_IDEAS, OUTFITS, SHELF_LIMIT, SNACKS, byId } from "./looks.js";
 import { portrait, tummy } from "./portrait.js";
 import { isSoft, makeReply } from "./reply.js";
 import { loadState, saveState } from "./store.js";
+import { funnyUtteranceSettings, pickFunnyVoice } from "./voice.js";
 
 const app = document.querySelector("#app");
 const live = document.querySelector("#live");
@@ -24,6 +26,9 @@ let stream = null;
 let bootToken = 0;
 let recognition = null;
 let listening = false;
+let pendingSpeech = "";
+let talkTimer = 0;
+let speechGen = 0;
 
 fileInput.addEventListener("change", async () => {
   const file = fileInput.files?.[0];
@@ -82,6 +87,7 @@ function releaseCamera() {
 function go(next) {
   releaseCamera();
   stopListening();
+  hush();
   view = next;
   render();
 }
@@ -95,6 +101,8 @@ window.addEventListener("resize", fitType);
 function render() {
   const bounce = Boolean(view.bounce);
   view.bounce = false;
+  const line = pendingSpeech;
+  pendingSpeech = "";
   const screen = {
     shelf: () => renderShelf(),
     camera: () => renderCamera(),
@@ -102,11 +110,13 @@ function render() {
     pal: () => renderPal(bounce),
   }[view.name]();
   app.replaceChildren(screen);
+  hush();
   document.title = view.name === "pal" && currentPal()
     ? `${currentPal().name} · Stuffed Pals`
     : "Stuffed Pals";
   fitType();
   if (view.name === "camera" && !view.error) bootCamera(screen);
+  if (line) requestAnimationFrame(() => speakAloud(line));
 }
 
 function bannerNode() {
@@ -291,7 +301,6 @@ function renderName() {
     photo: view.photo,
     outfit: "none",
     makeup: "none",
-    moodLine: "",
   };
   const field = el("input", {
     id: "pal-name",
@@ -334,7 +343,7 @@ function renderName() {
   );
 }
 
-function savePal(rawName) {
+async function savePal(rawName) {
   const name = String(rawName || "").replace(/\s+/g, " ").trim().slice(0, 18);
   if (!name) {
     banner = "Give your pal a name first.";
@@ -353,6 +362,13 @@ function savePal(rawName) {
     render();
     return;
   }
+  unlockVoice();
+  let landmarks = null;
+  try {
+    landmarks = await detectFaceFromUrl(view.photo);
+  } catch {
+    landmarks = null;
+  }
   const pal = {
     id: crypto.randomUUID(),
     name,
@@ -360,8 +376,7 @@ function savePal(rawName) {
     outfit: "none",
     makeup: "none",
     snacks: 0,
-    moodLine: `Hi. I am ${name}. Tell me something.`,
-    chat: [],
+    landmarks,
   };
   state.pals.unshift(pal);
   if (!persist()) {
@@ -371,7 +386,7 @@ function savePal(rawName) {
     render();
     return;
   }
-  announce(pal.moodLine);
+  pendingSpeech = `Hi! I am ${name}. Say something to me.`;
   go({ name: "pal", id: pal.id, tab: "talk", bounce: true });
 }
 
@@ -399,7 +414,8 @@ function renderPal(bounce) {
         onClick: () => hopOff(pal),
       }, view.confirmHop ? "Yes, hop off" : "Hop off")
     ),
-    el("div", { class: "stage" }, portrait(pal, { large: true, bubble: true, hop: bounce })),
+    el("div", { class: "stage" }, portrait(pal, { large: true, hop: bounce })),
+    el("p", { class: "caption", dataset: { caption: "1" } }),
     el("div", { class: "tabs", role: "tablist" },
       tabButton("talk", "Talk", tab),
       tabButton("snack", "Snack", tab),
@@ -425,127 +441,169 @@ function tabButton(id, label, current) {
 }
 
 function talkPanel(pal) {
-  const field = el("input", {
-    id: "say-line",
-    class: "field",
-    maxlength: "160",
-    autocomplete: "off",
-    placeholder: "Say something…",
-    "aria-label": `Say something to ${pal.name}`,
-    enterkeyhint: "send",
-  });
-  field.addEventListener("keydown", (event) => {
-    if (event.key === "Enter") {
-      event.preventDefault();
-      sendLine(field.value);
-    }
-  });
   return el("div", { class: "panel", dataset: { panel: "talk" } },
-    el("div", { class: "log" }, pal.chat.length
-      ? pal.chat.map((line) => el("p", {
-          class: line.role === "you" ? "chat you" : "chat pal",
-        },
-          el("span", { class: "who", text: line.role === "you" ? "You" : pal.name }),
-          el("span", {
-            class: "msg",
-            text: line.text,
-            dataset: line.role === "pal" ? { reply: "log" } : undefined,
-          })
-        ))
-      : el("p", { class: "hint", text: "Type or speak a short line. The reply uses your words." })),
-    el("div", { class: "composer" },
-      field,
-      el("button", {
-        class: "mic",
-        type: "button",
-        dataset: { action: "mic" },
-        "aria-label": "Speak a line",
-        "aria-pressed": "false",
-        onClick: () => speakLine(),
-      }, "Speak")
-    ),
     el("button", {
-      class: "primary",
+      class: "primary talk-btn",
       type: "button",
-      dataset: { action: "say" },
-      onClick: () => sendLine(field.value),
-    }, "Say it"),
-    el("p", { class: "fine", dataset: { talkStatus: "1" }, text: "Answers are made on this phone from your words." })
+      dataset: { action: "talk" },
+      "aria-pressed": "false",
+      onClick: () => startTalk(pal),
+    }, `Talk to ${pal.name}`),
+    el("p", {
+      class: "hint",
+      dataset: { talkStatus: "1" },
+      text: `Tap, then say something. ${pal.name} answers out loud.`,
+    }),
+    el("p", { class: "fine", text: "Answers are made on this phone from your words." })
   );
 }
 
-function sendLine(raw) {
-  const pal = currentPal();
-  if (!pal) return;
-  const text = String(raw || "").trim();
-  const reply = makeReply(text);
-  if (!reply) {
-    const status = app.querySelector("[data-talk-status]");
-    if (status) status.textContent = "Say a little something first.";
-    return;
-  }
-  stopListening();
-  pal.chat.push({ role: "you", text: text.slice(0, 160) });
-  pal.chat.push({ role: "pal", text: reply });
-  pal.chat = pal.chat.slice(-12);
-  pal.moodLine = reply;
-  persist();
-  announce(`${pal.name} says: ${reply}`);
-  view = { ...view, tab: "talk", bounce: true, confirmHop: false };
-  render();
-}
-
-function speakLine() {
+function startTalk(pal) {
   const Ctor = window.SpeechRecognition || window.webkitSpeechRecognition;
   const status = app.querySelector("[data-talk-status]");
-  const button = app.querySelector("[data-action=mic]");
+  const button = app.querySelector("[data-action=talk]");
   if (!Ctor) {
-    if (status) status.textContent = "This browser cannot hear right now. Type your line instead.";
+    if (status) status.textContent = "This phone cannot hear right now. Tap Try again.";
+    if (button) button.textContent = "Try again";
     return;
   }
   if (listening) {
     stopListening();
-    if (button) button.setAttribute("aria-pressed", "false");
-    if (status) status.textContent = "Answers are made on this phone from your words.";
+    if (button) {
+      button.setAttribute("aria-pressed", "false");
+      button.textContent = `Talk to ${pal.name}`;
+    }
     return;
   }
+  hush();
+  unlockVoice();
   const rec = new Ctor();
   recognition = rec;
   listening = true;
   rec.lang = "en-US";
   rec.interimResults = false;
   rec.maxAlternatives = 1;
-  if (button) button.setAttribute("aria-pressed", "true");
+  if (button) {
+    button.setAttribute("aria-pressed", "true");
+    button.textContent = "Listening…";
+  }
   if (status) status.textContent = "Listening…";
   rec.onresult = (event) => {
     const said = event.results?.[0]?.[0]?.transcript || "";
     listening = false;
     recognition = null;
-    if (said.trim()) sendLine(said);
-    else if (status) status.textContent = "I could not hear that. Try again, or type it.";
+    resetTalkButton(pal);
+    if (said.trim()) answerSpoken(said);
+    else if (status) status.textContent = "I could not hear that. Tap and try again.";
   };
   rec.onerror = (event) => {
     listening = false;
     recognition = null;
+    resetTalkButton(pal);
     const node = app.querySelector("[data-talk-status]");
-    const mic = app.querySelector("[data-action=mic]");
-    if (mic) mic.setAttribute("aria-pressed", "false");
+    const talk = app.querySelector("[data-action=talk]");
+    if (talk) talk.textContent = "Try again";
     if (!node) return;
     node.textContent = event.error === "not-allowed"
-      ? "The microphone is blocked. Allow it, or type your line."
-      : "I could not hear that. Try again, or type it.";
+      ? "The microphone is blocked. Allow microphone access in your browser, then tap Try again."
+      : "I could not hear that. Tap and try again.";
   };
   rec.onend = () => {
     listening = false;
-    const mic = app.querySelector("[data-action=mic]");
-    if (mic) mic.setAttribute("aria-pressed", "false");
+    const talk = app.querySelector("[data-action=talk]");
+    if (talk && talk.getAttribute("aria-pressed") === "true") resetTalkButton(pal);
   };
   try {
     rec.start();
   } catch {
     listening = false;
-    if (status) status.textContent = "This browser cannot hear right now. Type your line instead.";
+    resetTalkButton(pal);
+    if (status) status.textContent = "This phone cannot hear right now. Tap Try again.";
   }
+}
+
+function resetTalkButton(pal) {
+  const button = app.querySelector("[data-action=talk]");
+  if (!button) return;
+  button.setAttribute("aria-pressed", "false");
+  button.textContent = `Talk to ${pal.name}`;
+}
+
+function answerSpoken(said) {
+  const pal = currentPal();
+  if (!pal) return;
+  const reply = makeReply(said);
+  const status = app.querySelector("[data-talk-status]");
+  if (!reply) {
+    if (status) status.textContent = "I could not hear that. Tap and try again.";
+    return;
+  }
+  if (status) status.textContent = `${pal.name} is talking.`;
+  speakAloud(reply);
+}
+
+function unlockVoice() {
+  if (!window.speechSynthesis) return;
+  const primer = new SpeechSynthesisUtterance(" ");
+  primer.volume = 0;
+  primer.rate = 2;
+  window.speechSynthesis.speak(primer);
+}
+
+function hush() {
+  speechGen += 1;
+  window.clearTimeout(talkTimer);
+  if (window.speechSynthesis) window.speechSynthesis.cancel();
+  const portraitNode = app.querySelector(".portrait.large");
+  if (portraitNode) portraitNode.classList.remove("talking");
+}
+
+function speakAloud(line) {
+  const pal = currentPal();
+  if (!line || !pal || !window.speechSynthesis) return;
+  const gen = ++speechGen;
+  window.speechSynthesis.cancel();
+  const caption = app.querySelector("[data-caption]");
+  const portraitNode = app.querySelector(".portrait.large");
+  if (caption) {
+    caption.textContent = line;
+    caption.dataset.reply = "latest";
+  }
+  if (portraitNode) portraitNode.classList.add("talking");
+  announce(`${pal.name} says: ${line}`);
+  const settings = funnyUtteranceSettings();
+  const utter = new SpeechSynthesisUtterance(`${line} Hee hee!`);
+  utter.pitch = settings.pitch;
+  utter.rate = settings.rate;
+  utter.volume = settings.volume;
+  utter.lang = "en-US";
+  const voice = pickFunnyVoice(window.speechSynthesis.getVoices());
+  if (voice) utter.voice = voice;
+  const stopMouth = () => {
+    if (gen !== speechGen) return;
+    if (portraitNode?.isConnected) portraitNode.classList.remove("talking");
+    const status = app.querySelector("[data-talk-status]");
+    if (status?.isConnected && status.textContent === `${pal.name} is talking.`) {
+      status.textContent = `Tap, then say something. ${pal.name} answers out loud.`;
+    }
+  };
+  utter.onend = stopMouth;
+  utter.onerror = stopMouth;
+  window.clearTimeout(talkTimer);
+  let started = false;
+  const begin = () => {
+    if (started || gen !== speechGen || !portraitNode?.isConnected) return;
+    started = true;
+    const picked = pickFunnyVoice(window.speechSynthesis.getVoices());
+    if (picked) utter.voice = picked;
+    window.speechSynthesis.speak(utter);
+  };
+  if (window.speechSynthesis.getVoices().length) begin();
+  else {
+    window.speechSynthesis.addEventListener("voiceschanged", begin, { once: true });
+    window.setTimeout(begin, 1200);
+  }
+  talkTimer = window.setTimeout(stopMouth, Math.min(14000, 900 + line.length * 90));
 }
 
 function snackPanel(pal) {
@@ -576,11 +634,11 @@ function feed(id) {
   const snack = SNACKS.find((item) => item.id === id);
   if (!pal || !snack || pal.snacks >= 5) return;
   pal.snacks += 1;
-  pal.moodLine = pal.snacks >= 5
+  const line = pal.snacks >= 5
     ? `${snack.line} ${pal.name} is full of wiggles.`
     : snack.line;
   persist();
-  announce(pal.moodLine);
+  pendingSpeech = line;
   view = { ...view, tab: "snack", bounce: true, confirmHop: false };
   render();
 }
@@ -621,9 +679,8 @@ function applyLook(kind, id) {
   const item = list.find((entry) => entry.id === id);
   if (!pal || !item || pal[kind] === id) return;
   pal[kind] = id;
-  pal.moodLine = item.line;
   persist();
-  announce(item.line);
+  pendingSpeech = item.line;
   view = { ...view, tab: "dress", bounce: true, confirmHop: false };
   render();
 }
@@ -660,4 +717,5 @@ function snackIcon(id) {
   });
 }
 
+if (window.speechSynthesis) window.speechSynthesis.getVoices();
 render();

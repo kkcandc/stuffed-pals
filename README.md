@@ -4,11 +4,11 @@ A phone-width game for Cora. Snap a stuffed animal with the camera and that phot
 
 With each pal you can:
 
-- Talk. Type a short line, or speak one if the phone can hear you. The pal answers that line, using words you just said.
+- Talk by speaking into the phone. The pal answers out loud in a silly voice, and its mouth moves. The reply uses the words you just said.
 - Feed it a snack.
 - Dress it up and give it a makeup look.
 
-Photos and pals stay in this browser (`localStorage`). There is no account and no server. Replies are written on the device from your words. They are not from a live model.
+Photos and pals stay in this browser (`localStorage`). There is no account and no server. Replies are written on the device from your words, then spoken aloud. They are not from a live model.
 
 If the camera is blocked, the game says so and lets you try again.
 
