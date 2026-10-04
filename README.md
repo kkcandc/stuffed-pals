@@ -1,6 +1,10 @@
 # Stuffed Pals
 
-A phone-width game for Cora. Snap a stuffed animal with the camera and that photo becomes a pal on the shelf. You can keep more than one.
+A phone-width game for Cora. Snap a stuffed animal with the camera and that photo becomes a 3D pal on the shelf. You can keep more than one.
+
+The figure is built on the phone from the one photo. The animal's outline is puffed into a stuffed volume, colored from the picture, then rigged so it can blink, bob, and open its mouth. Dress-up sits on the eyes, head, and cheeks of that figure. The photo does not leave the browser.
+
+A learned single-photo rebuild — a rigged mesh from a service such as Tripo, Meshy, Rodin, or Luma — still needs an API key this project does not have. The game does not call those services.
 
 With each pal you can:
 
@@ -8,7 +12,7 @@ With each pal you can:
 - Feed it a snack.
 - Dress it up and give it a makeup look.
 
-Photos and pals stay in this browser (`localStorage`). There is no account and no server. Replies are written on the device from your words, then spoken aloud. They are not from a live model.
+Photos and pals stay in this browser (`localStorage`). There is no account and no server. Replies are written on the device from your words, then spoken aloud. They are not from a live model. If WebGL is missing, the saved photo still shows.
 
 If the camera is blocked, the game says so and lets you try again.
 

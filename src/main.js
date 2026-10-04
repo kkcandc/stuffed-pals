@@ -143,8 +143,8 @@ function renderShelf() {
     el("p", {
       class: "lede",
       text: empty
-        ? "Point the camera at a stuffed animal. That photo becomes a pal, and it stays on this phone."
-        : `${count} ${count === 1 ? "pal" : "pals"} on the shelf. Photos stay on this phone.`,
+        ? "Point the camera at a stuffed animal. That photo becomes a 3D pal, and it stays on this phone."
+        : `${count} ${count === 1 ? "pal" : "pals"} on the shelf. Each photo stays on this phone.`,
     }),
     empty
       ? el("div", { class: "empty" },

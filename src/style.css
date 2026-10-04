@@ -349,90 +349,19 @@ h2 { font-size: 1.25em; }
   width: 100%;
   border-radius: 1.5em;
   overflow: hidden;
-  background: #e7d7c6;
-  border: 2px dashed #d7b89a;
+  background:
+    radial-gradient(ellipse at 50% 38%, #fff8ef 0%, #f3ddc8 58%, #e7c7a8 100%);
+  border: 2px solid #e6d0b8;
   box-shadow: 0 0.55em 0 #e4d3bf;
 }
 .portrait.large { height: 100%; width: auto; max-width: 100%; }
+.portrait canvas.plush-view,
 .portrait img {
   width: 100%;
   height: 100%;
-  object-fit: cover;
   display: block;
 }
-.portrait svg.wear {
-  position: absolute;
-  inset: 0;
-  width: 100%;
-  height: 100%;
-  pointer-events: none;
-}
-.fit {
-  position: absolute;
-  pointer-events: none;
-  opacity: 0;
-}
-.fit.ready { opacity: 1; }
-.piece {
-  position: absolute;
-  display: grid;
-  place-items: center;
-}
-.anchor-c { transform: translate(-50%, -50%); }
-.anchor-b { transform: translate(-50%, -100%); }
-.piece svg { width: 100%; height: 100%; display: block; }
-.bow { aspect-ratio: 120 / 70; }
-.hat { aspect-ratio: 140 / 110; }
-.scarf { aspect-ratio: 200 / 64; }
-.lens {
-  aspect-ratio: 1;
-  border-radius: 50%;
-  background: rgba(255, 250, 244, 0.16);
-  box-shadow: inset 0 0 0 4px #2a211c, 0 0 0 2px rgba(255, 250, 244, 0.45);
-}
-.lens svg { width: 46%; height: 46%; }
-.bridge {
-  height: 5px;
-  background: #2a211c;
-  border-radius: 999px;
-}
-.cheek {
-  aspect-ratio: 1.25;
-  border-radius: 50%;
-  background: radial-gradient(circle, rgba(255, 90, 130, 0.9) 0%, rgba(255, 90, 130, 0.35) 62%, transparent 72%);
-}
-.lips {
-  aspect-ratio: 1.7;
-  border-radius: 40% 40% 48% 48%;
-  background: #c23b55;
-  box-shadow: inset 0 -3px 0 rgba(90, 20, 36, 0.25);
-}
-.spark { aspect-ratio: 1; }
-.mouth {
-  aspect-ratio: 1.45;
-  background: #3b221f;
-  border-radius: 45% 45% 50% 50%;
-  overflow: hidden;
-  opacity: 0;
-  transform-origin: center 30%;
-}
-.mouth .tongue {
-  position: absolute;
-  left: 18%;
-  right: 18%;
-  bottom: 10%;
-  height: 42%;
-  background: #e56b84;
-  border-radius: 40% 40% 50% 50%;
-}
-.portrait.talking .mouth {
-  opacity: 1;
-  animation: yap 0.16s ease-in-out infinite;
-}
-@keyframes yap {
-  0%, 100% { transform: translate(-50%, -42%) scaleY(0.2); }
-  45% { transform: translate(-50%, -58%) scaleY(1); }
-}
+.portrait img { object-fit: cover; }
 .caption {
   margin: 0;
   min-height: 2.4em;
